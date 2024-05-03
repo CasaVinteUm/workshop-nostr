@@ -1,54 +1,72 @@
 <script lang="ts">
-  let name = 'João'
-  let age = 26
+  import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
+  import { bytesToHex } from '@noble/hashes/utils'
 
-  $: isAdult = age >= 18
+  let sk: Uint8Array | null = null
+  let pk: string | null = null
 
-  function increaseAge() {
-    age += 1
+  let isImportingSk = false
+  let inputSk = ''
+
+  $: skHex = sk ? bytesToHex(sk) : null
+  $: skNip19 = sk ? nip19.nsecEncode(sk) : null
+  $: pkNip19 = pk ? nip19.npubEncode(pk) : null
+
+  function generateKeys() {
+    isImportingSk = false
+    sk = generateSecretKey()
+    pk = getPublicKey(sk)
   }
 
-  function decreaseAge() {
-    if (age === 0) return alert('Idade não pode ser menor que 0')
+  function showImportSk() {
+    sk = null
+    pk = null
+    isImportingSk = true
+  }
 
-    age -= 1
+  function importSk() {
+    try {
+      const { data, type } = nip19.decode(inputSk)
+
+      if (type !== 'nsec') {
+        throw new Error('Invalid key type')
+      }
+
+      sk = data
+      pk = getPublicKey(sk)
+      inputSk = ''
+      isImportingSk = false
+    } catch (error) {
+      alert('Chave privada inválida')
+    }
   }
 </script>
 
 <div>
-  <h1>Svelte.dev basics</h1>
+  <h1>Chave privada (sk) e Chave pública (pk)</h1>
 
-  <a href="https://svelte.dev/" target="_blank">Docs</a>
+  <button on:click={generateKeys}>Gerar chaves</button>
+  <button on:click={showImportSk}>Importar chave privada</button>
 
-  <hr>
+  {#if sk !== null && pk !== null }
+    <pre>
+      # Chave privada (sk) hex:
+      {skHex}
+      # Chave pública (pk) hex:
+      {pk}
 
-  <h2>Variáveis</h2>
-
-  <p>Meu nome é { name } e eu tenho { age } anos.</p>
-
-  <h2>Funções e event listeners</h2>
-
-  <div>
-    <button on:click={increaseAge}>aumentar idade</button>
-  </div>
-
-  <div>
-    <button on:click={decreaseAge}>diminuir idade</button>
-  </div>
-
-  <h2>Condicionais e computed properties</h2>
-
-  <ul>
-    <li>É maior de idade: { isAdult ? 'Sim' : 'Não' }</li>
-  </ul>
-
-  {#if isAdult}
-    <p>É maior de idade</p>
-  {:else}
-    <p>Não é maior de idade</p>
+      # Chave privada (sk) nip19:
+      {skNip19}
+      # Chave pública (pk) nip19:
+      {pkNip19}
+    </pre>
   {/if}
 
-  <h2>Input de texto</h2>
-  Nome:
-  <input bind:value={name} />
+  {#if isImportingSk}
+    <p>Chave privada (sk) hex:</p>
+    <input type="text" bind:value={inputSk} />
+    <button on:click={importSk}>
+      Importar
+    </button>
+  {/if}
 </div>
