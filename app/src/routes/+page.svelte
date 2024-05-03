@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools'
+  import type { EventTemplate, Event } from 'nostr-tools'
+  import { generateSecretKey, getPublicKey, nip19, getEventHash, finalizeEvent } from 'nostr-tools'
   import { bytesToHex } from '@noble/hashes/utils'
 
   let sk: Uint8Array | null = null
@@ -40,6 +41,26 @@
       alert('Chave privada inválida')
     }
   }
+
+  let event: Event
+
+  let inputContent = ''
+
+  function updateContent() {
+    if (!sk) {
+      alert('Chave privada não encontrada')
+      return
+    }
+
+    const eventTemplate: EventTemplate = {
+      content: inputContent,
+      created_at: Math.floor(Date.now() / 1000),
+      kind: 1,
+      tags: []
+    }
+
+    event = finalizeEvent(eventTemplate, sk)
+  }
 </script>
 
 <div>
@@ -69,4 +90,22 @@
       Importar
     </button>
   {/if}
+
+  <h1>Eventos e assinaturas</h1>
+
+  <p>Conteúdo:</p>
+  <input bind:value={inputContent} />
+  <button on:click={updateContent}>atualizar e assinar</button>
+
+  {#if event}
+    <pre>{JSON.stringify(event, null, 2)}</pre>
+  {/if}
 </div>
+
+<style>
+pre {
+  font-family: monospace;
+  white-space: pre-wrap;
+  display: block;
+}
+</style>
