@@ -1,7 +1,10 @@
 <script lang="ts">
-  import type { EventTemplate, Event } from 'nostr-tools'
-  import { generateSecretKey, getPublicKey, nip19, getEventHash, finalizeEvent } from 'nostr-tools'
+  import type { EventTemplate, Event, Subscription } from 'nostr-tools'
+  import { generateSecretKey, getPublicKey, nip19, finalizeEvent, validateEvent } from 'nostr-tools'
   import { bytesToHex } from '@noble/hashes/utils'
+  import { Relay } from 'nostr-tools/relay'
+
+  // 01 Chave privada (sk) e Chave pública (pk)
 
   let sk: Uint8Array | null = null
   let pk: string | null = null
@@ -42,6 +45,8 @@
     }
   }
 
+  // 02 Eventos e assinaturas
+
   let event: Event
 
   let inputContent = ''
@@ -60,6 +65,74 @@
     }
 
     event = finalizeEvent(eventTemplate, sk)
+  }
+
+  // 03 Relays
+
+  const relayURL = 'wss://relay.damus.io/'
+  let relay: Relay | null = null
+  $: isConnected = relay !== null && relay.connected
+
+  async function connectToRelay() {
+    try {
+      relay = await Relay.connect(relayURL)
+    } catch (error) {
+      alert('Erro ao conectar ao relay')
+    }
+  }
+
+  async function publishEvent() {
+    if (!isConnected) {
+      alert('Relay não conectado')
+      return
+    }
+
+    try {
+      await relay?.publish(event)
+      alert('Evento publicado com sucesso')
+    } catch (error) {
+      alert('Erro ao publicar evento')
+    }
+  }
+
+  let inputSubscribePk = ''
+  let subscribedPks: string[] = []
+  let subs: Subscription
+  let events: Event[] = []
+
+  function subscribeToPk() {
+    if (!relay) {
+      return
+    }
+
+    try {
+      if (subscribedPks.includes(inputSubscribePk)) {
+        return
+      }
+      const { type, data } = nip19.decode(inputSubscribePk)
+
+      if (type !== 'npub') {
+        throw new Error('Invalid key type')
+      }
+
+      subscribedPks = [...subscribedPks, inputSubscribePk]
+
+      subs = relay?.subscribe([
+        {
+          kinds: [1],
+          authors: [
+            data
+          ]
+        }
+      ], {
+        onevent(event) {
+          events = [...events, event]
+        }
+      })
+    } catch (error) {
+      alert('Chave pública inválida')
+      return
+    }
   }
 </script>
 
@@ -100,12 +173,36 @@
   {#if event}
     <pre>{JSON.stringify(event, null, 2)}</pre>
   {/if}
-</div>
 
-<style>
-pre {
-  font-family: monospace;
-  white-space: pre-wrap;
-  display: block;
-}
-</style>
+  <h1>Relays</h1>
+
+  <pre>
+    Conectado: {isConnected ? 'Sim' : 'Não'}
+    Ouvindo:
+    {#each subscribedPks as pk}
+      <p> - {pk}</p>
+    {/each}
+  </pre>
+
+  {#if !isConnected}
+    <button on:click={connectToRelay}>Conectar</button>
+  {/if}
+
+  {#if isConnected}
+    {#if validateEvent(event)}
+      <button on:click={publishEvent}>Publicar nota</button>
+    {/if}
+
+    <p>Chave pública para ouvir:</p>
+    <input type="text" bind:value={inputSubscribePk} />
+    <button on:click={subscribeToPk}>ouvir este perfil</button>
+
+    <div>
+      <ul>
+        {#each events as event}
+          <li>{new Date(event.created_at * 1000).toLocaleString()} <b>{nip19.npubEncode(event.pubkey).slice(0, 6)}...{nip19.npubEncode(event.pubkey).slice(-6)}</b> disse <b>{event.content}</b></li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+</div>
